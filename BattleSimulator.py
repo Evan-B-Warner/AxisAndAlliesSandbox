@@ -1,4 +1,5 @@
 import json
+import time
 import itertools
 
 
@@ -113,56 +114,71 @@ class BattleSimulator(object):
         removes the `num_hits` least valuable units by combat strength
         """
         # first remove one health from any units with more than one health
-        for unit in units:
+        units_copy = units[:]
+        for unit in units_copy:
             if not num_hits:
-                return units
+                return units_copy
             if unit.health > 1:
                 unit_health -= 1
                 num_hits -= 1
         
         # otherwise let the worst unit take the hit
-        while num_hits:
-            units.pop(self.find_worst_unit(units, side))
+        while num_hits and len(units_copy):
+            units_copy.pop(self.find_worst_unit(units_copy, side))
+            num_hits -= 1
         
-        return units
+        return units_copy
 
 
-    def compute_victory_probabilities(self, attacking_units, defending_units, attacker_first=True, num_casualties=0):
+    def compute_victory_probabilities(self, attacking_units, defending_units, num_rounds, attacker_first=True, num_casualties=0):
         """Determines the probability of the attacking side winning the fight
 
         """
         # check for guaranteed attacker of defender wins
-        if not(len(attacking_units)):
+        if num_rounds > 100:
+            return 0.5
+        orig_attacking_units, orig_defending_units = attacking_units[:], defending_units[:]
+        if not(len(orig_attacking_units)):
+            # defenders win all "draws"
             return 0
-        elif not(len(defending_units)):
+        elif not(len(orig_defending_units)):
             return 1
         
         # check if it is the attackers turn
         if attacker_first:
             # determine the probability of each number of hits by the attackers
-            hit_probabilities = self.compute_hit_probabilities(attacking_units, attacker_first)
+            hit_probabilities = self.compute_hit_probabilities(orig_attacking_units, attacker_first)
+            #print('att', len(orig_attacking_units), len(orig_defending_units), hit_probabilities)
             # take a sum of the win probabilities of each scenario resulting from the number of attacker hits
             return sum(
-                [prob*self.compute_victory_probabilities(
-                    attacking_units, defending_units, 
+                [hit_probabilities[num_hits]*self.compute_victory_probabilities(
+                    orig_attacking_units, orig_defending_units, num_rounds+1,
                     attacker_first=(not attacker_first), num_casualties=num_hits
-                ) for num_hits, prob in hit_probabilities]
+                ) for num_hits in hit_probabilities]
             )
         else:
             # determine the probability of each number of hits by the defenders
-            hit_probabilities = self.compute_hit_probabilities(defending_units, attacker_first)
-            # remove defender casualties
-            new_defending_units = self.remove_worst_units(defending_units, num_casualties, side='defense')[:]
+            hit_probabilities = self.compute_hit_probabilities(orig_defending_units, attacker_first)
+            
+            defending_units = orig_defending_units[:]
+            if num_casualties:
+                # remove defender casualties
+                defending_units = self.remove_worst_units(orig_defending_units, num_casualties, side='defense')[:]
+            #else:
+                # otherwise, ensure there is at least one defender hit
+                #hit_probabilities.pop(0)
             # take a sum of the win probabilities of each scenario resulting from the number of defender hits
+            #print('def', len(orig_attacking_units), len(orig_defending_units), num_casualties, hit_probabilities)
             return sum(
-                [prob*self.compute_victory_probabilities(
-                    self.remove_worst_units(attacking_units, num_hits, side='attack'), new_defending_units, 
+                [hit_probabilities[num_hits]*self.compute_victory_probabilities(
+                    self.remove_worst_units(orig_attacking_units, num_hits, side='attack'), defending_units, num_rounds+1,
                     attacker_first=(not attacker_first), num_casualties=0
-                ) for prob, num_hits in hit_probabilities]
+                ) for num_hits in hit_probabilities]
             )
 
             
 
 if __name__ == "__main__":
     sim = BattleSimulator(attacking_units={"Infantry": 3}, defending_units={"Infantry": 1})
-    sim.compute_victory_probabilities(sim.attacking_units, sim.defending_units)
+    res = sim.compute_victory_probabilities(sim.attacking_units, sim.defending_units, 1)
+    print(res)
