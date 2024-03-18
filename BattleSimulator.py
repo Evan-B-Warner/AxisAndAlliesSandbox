@@ -164,7 +164,7 @@ class BattleSimulator(object):
             if not num_hits:
                 return units_copy
             if unit.health > 1:
-                unit_health -= 1
+                unit.health -= 1
                 num_hits -= 1
         
         # otherwise let the worst unit take the hit
@@ -242,6 +242,8 @@ class BattleSimulator(object):
         if verbose:
             print(f"Att wins {round(attacking_win_rate*100, 2)}% of battles")
             print(f"Def wins {round(defending_win_rate*100, 2)}% of battles")
+        
+        return attacking_win_rate, defending_win_rate
 
 
 if __name__ == "__main__":
