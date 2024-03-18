@@ -187,8 +187,7 @@ class BattleSimulator(object):
         num_rounds = 1
         scenarios = [[attacking_units, defending_units]]
         seen = {}
-        while num_rounds <= self.precision:
-            print(num_rounds, len(scenarios))
+        while True:
             new_scenarios = []
             for scen_attacking_units, scen_defending_units in scenarios:
                 # determine the probability of each number of hits by the attackers and defenders
@@ -198,14 +197,8 @@ class BattleSimulator(object):
                 # determine all new scenarios that can result from the hit probabilities
                 for att_num_hits in att_hit_probabilities:
                     for def_num_hits in def_hit_probabilities:
-                        scen_key = f"{len(scen_attacking_units)}_{len(scen_defending_units)}"
-                        if scen_key in seen:
-                            print(seen)
-                            new_attacking_units, new_defending_units = seen[scen_key]
-                        else:
-                            new_defending_units = self.remove_worst_units(scen_defending_units, att_num_hits, side='defense')[:]
-                            new_attacking_units = self.remove_worst_units(scen_attacking_units, def_num_hits, side='attack')[:]
-                            seen[scen_key] = [new_attacking_units, new_defending_units]
+                        new_defending_units = self.remove_worst_units(scen_defending_units, att_num_hits, side='defense')[:]
+                        new_attacking_units = self.remove_worst_units(scen_attacking_units, def_num_hits, side='attack')[:]
                         if not len(new_attacking_units):
                             # defenders win draws
                             self.defender_wins += 1
@@ -213,8 +206,11 @@ class BattleSimulator(object):
                         elif not len(new_defending_units):
                             self.attacker_wins += 1
                             self.battles_simulated += 1
-                        else:
+                        elif num_rounds <= self.precision:
                             new_scenarios.append([new_attacking_units, new_defending_units])
+                        else:
+                            self.unresolved_battles += 1
+                            self.battles_simulated += 1
                 
             # increment the number of rounds, and check for remaining scenarios
             num_rounds += 1
@@ -224,7 +220,7 @@ class BattleSimulator(object):
                 scenarios = new_scenarios[:]
 
     
-    def simulate_battle(self, num_rounds_precision=5):
+    def simulate_battle(self, num_rounds_precision=5, verbose=True):
         """Wrapper for the computation of victory probabilities for a battle
 
         """
@@ -238,19 +234,11 @@ class BattleSimulator(object):
         # simulate the battle
         start_time = time.perf_counter()
         self.compute_victory_probabilities_2(self.attacking_units, self.defending_units)
-        run_time = round(time.perf_counter()-start_time, 2)
-        print(f"Att wins {self.attacker_wins}, {round(self.attacker_wins/self.battles_simulated*100, 2)}%")
-        print(f"Def wins {self.defender_wins}, {round(self.defender_wins/self.battles_simulated*100, 2)}%")
-        print(f"Simulated {self.battles_simulated} battles in {run_time}s")
+        run_time = round(time.perf_counter()-start_time, 4)
 
-
-if __name__ == "__main__":
-    #for num_units in range(1, 20):
-    attack = {
-        "Infantry": 3
-    }
-    defense = {
-        "Infantry": 1
-    }
-    sim = BattleSimulator(attacking_units=attack, defending_units=defense)
-    sim.simulate_battle(num_rounds_precision=5)
+        # print results if verbose
+        if verbose:
+            print(f"Att wins {self.attacker_wins}, {round(self.attacker_wins/self.battles_simulated*100, 2)}%")
+            print(f"Def wins {self.defender_wins}, {round(self.defender_wins/self.battles_simulated*100, 2)}%")
+            print(f"Unresolved: {self.unresolved_battles}, {round(self.unresolved_battles/self.battles_simulated*100, 2)}%")
+            print(f"Simulated {self.battles_simulated} scenarios in {run_time}s")
