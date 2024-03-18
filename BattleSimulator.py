@@ -5,17 +5,25 @@ import itertools
 
 class Unit(object):
 
-    def __init__(self, attack, defense, cost, health, bonuses):
+    def __init__(self, name, attack, defense, cost, health):
+        self.name = name
         self.attack = attack
         self.defense = defense
         self.cost = cost
         self.health = health
-        self.bonuses = bonuses
-        self.precision = 5
-        self.defender_wins = 0
-        self.attacker_wins = 0
-        self.unresolved_battles = 0
-        self.battles_simulated = 0
+    
+    def copy(self):
+        """Creates and returns a shallow copy of the unit
+
+        """
+        new_copy = Unit(
+            self.name,
+            self.attack,
+            self.defense,
+            self.cost,
+            self.health
+        )
+        return new_copy
 
 
 class BattleSimulator(object):
@@ -30,6 +38,11 @@ class BattleSimulator(object):
         # initalize variables
         self.attacking_units = self.convert_to_unit_type(attacking_units)
         self.defending_units = self.convert_to_unit_type(defending_units)
+        self.precision = 5
+        self.defender_wins = 0
+        self.attacker_wins = 0
+        self.unresolved_battles = 0
+        self.battles_simulated = 0
     
 
     def convert_to_unit_type(self, units):
@@ -44,15 +57,36 @@ class BattleSimulator(object):
         # convert each unit
         for unit in units:
             unit_stats = unit_info[unit]
-            converted_unit = Unit(
-                unit_stats["attack"],
-                unit_stats["defense"],
-                unit_stats["cost"],
-                unit_stats["health"],
-                unit_stats["bonuses"]
-            )
-            converted_units.extend([converted_unit][:]*units[unit])
+            for i in range(units[unit]):
+                converted_units.append(
+                    Unit(
+                        unit,
+                        unit_stats["attack"],
+                        unit_stats["defense"],
+                        unit_stats["cost"],
+                        unit_stats["health"]
+                    ))
         return converted_units
+    
+
+    def add_bonuses(self, units):
+        """Determines and adds all applicable bonuses to the attacking units
+
+        """
+        # check for artillery + infantry
+        num_artillery = sum([1 if u.name == 'Artillery' else 0 for u in units])
+        
+        # check for tac bomber + fighter or tank
+        num_fighters_and_tanks = sum([1 if u.name in ["Fighter", "Tank"] else 0 for u in units])
+
+        # apply bonuses
+        for u in units:
+            if num_artillery and "Infantry" in u.name:
+                u.attack += 1
+                num_artillery -= 1
+            if num_fighters_and_tanks and u.name == "Tactical Bomber":
+                u.attack += 1
+                num_fighters_and_tanks -= 1
     
 
     def probability_of_x_hits(self, hit_probs_by_unit, num_hits):
@@ -82,9 +116,15 @@ class BattleSimulator(object):
 
         numbers of hits
         """
+        # add bonuses to units if applicable
+        new_units = []
+        for unit in units:
+            new_units.append(unit.copy())
+        self.add_bonuses(new_units)
+
         # determine the raw probability of each unit hitting
         hit_probs_by_unit = []
-        for unit in units:
+        for unit in new_units:
             if is_attacker:
                 hit_probs_by_unit.append(unit.attack/6)
             else:
@@ -92,7 +132,7 @@ class BattleSimulator(object):
         
         # find the probability for each number of hits
         probability_of_hits = {}
-        for num_hits in range(len(units)+1):
+        for num_hits in range(len(new_units)+1):
             probability_of_hits[num_hits] = self.probability_of_x_hits(hit_probs_by_unit, num_hits)
         return probability_of_hits
     
@@ -159,7 +199,6 @@ class BattleSimulator(object):
         if attacker_first:
             # determine the probability of each number of hits by the attackers
             hit_probabilities = self.compute_hit_probabilities(orig_attacking_units, attacker_first)
-            #print('att', len(orig_attacking_units), len(orig_defending_units), hit_probabilities)
             # take a sum of the win probabilities of each scenario resulting from the number of attacker hits
             return sum(
                 [hit_probabilities[num_hits]*self.compute_victory_probabilities(
@@ -174,58 +213,20 @@ class BattleSimulator(object):
             # remove defender casualties
             defending_units = self.remove_worst_units(orig_defending_units, num_casualties, side='defense')[:]
             # take a sum of the win probabilities of each scenario resulting from the number of defender hits
-            #print('def', len(orig_attacking_units), len(orig_defending_units), num_casualties, hit_probabilities)
             return sum(
                 [hit_probabilities[num_hits]*self.compute_victory_probabilities(
                     self.remove_worst_units(orig_attacking_units, num_hits, side='attack'), defending_units, num_rounds+1,
                     attacker_first=(not attacker_first), num_casualties=0
                 ) for num_hits in hit_probabilities]
             )
-    
-
-    def compute_victory_probabilities_2(self, attacking_units, defending_units):
-        num_rounds = 1
-        scenarios = [[attacking_units, defending_units]]
-        seen = {}
-        while True:
-            new_scenarios = []
-            for scen_attacking_units, scen_defending_units in scenarios:
-                # determine the probability of each number of hits by the attackers and defenders
-                att_hit_probabilities = self.compute_hit_probabilities(scen_attacking_units, is_attacker=True)
-                def_hit_probabilities = self.compute_hit_probabilities(scen_defending_units, is_attacker=False)
-
-                # determine all new scenarios that can result from the hit probabilities
-                for att_num_hits in att_hit_probabilities:
-                    for def_num_hits in def_hit_probabilities:
-                        new_defending_units = self.remove_worst_units(scen_defending_units, att_num_hits, side='defense')[:]
-                        new_attacking_units = self.remove_worst_units(scen_attacking_units, def_num_hits, side='attack')[:]
-                        if not len(new_attacking_units):
-                            # defenders win draws
-                            self.defender_wins += 1
-                            self.battles_simulated += 1
-                        elif not len(new_defending_units):
-                            self.attacker_wins += 1
-                            self.battles_simulated += 1
-                        elif num_rounds <= self.precision:
-                            new_scenarios.append([new_attacking_units, new_defending_units])
-                        else:
-                            self.unresolved_battles += 1
-                            self.battles_simulated += 1
-                
-            # increment the number of rounds, and check for remaining scenarios
-            num_rounds += 1
-            if new_scenarios == []:
-                return
-            else:
-                scenarios = new_scenarios[:]
 
     
-    def simulate_battle(self, num_rounds_precision=5, verbose=True):
+    def simulate_battle(self, precision=5, verbose=True):
         """Wrapper for the computation of victory probabilities for a battle
 
         """
         # Update/reset attributes for new simulation
-        self.precision = num_rounds_precision
+        self.precision = precision
         self.battles_simulated = 0
         self.unresolved_battles = 0
         self.defender_wins = 0
@@ -233,12 +234,24 @@ class BattleSimulator(object):
 
         # simulate the battle
         start_time = time.perf_counter()
-        self.compute_victory_probabilities_2(self.attacking_units, self.defending_units)
+        attacking_win_rate = self.compute_victory_probabilities(self.attacking_units, self.defending_units, num_rounds=1, attacker_first=True, num_casualties=0)
+        defending_win_rate = 1 - attacking_win_rate
         run_time = round(time.perf_counter()-start_time, 4)
 
         # print results if verbose
         if verbose:
-            print(f"Att wins {self.attacker_wins}, {round(self.attacker_wins/self.battles_simulated*100, 2)}%")
-            print(f"Def wins {self.defender_wins}, {round(self.defender_wins/self.battles_simulated*100, 2)}%")
-            print(f"Unresolved: {self.unresolved_battles}, {round(self.unresolved_battles/self.battles_simulated*100, 2)}%")
-            print(f"Simulated {self.battles_simulated} scenarios in {run_time}s")
+            print(f"Att wins {round(attacking_win_rate*100, 2)}% of battles")
+            print(f"Def wins {round(defending_win_rate*100, 2)}% of battles")
+
+
+if __name__ == "__main__":
+    attack = {
+        "Infantry": 3,
+        "Artillery": 1
+    }
+    defense = {
+        "Infantry": 2,
+        "Artillery": 1
+    }
+    sim = BattleSimulator(attack, defense)
+    sim.simulate_battle(precision=10)
