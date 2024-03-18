@@ -11,6 +11,11 @@ class Unit(object):
         self.cost = cost
         self.health = health
         self.bonuses = bonuses
+        self.precision = 5
+        self.defender_wins = 0
+        self.attacker_wins = 0
+        self.unresolved_battles = 0
+        self.battles_simulated = 0
 
 
 class BattleSimulator(object):
@@ -128,20 +133,26 @@ class BattleSimulator(object):
             num_hits -= 1
         
         return units_copy
+    
 
-
-    def compute_victory_probabilities(self, attacking_units, defending_units, num_rounds, attacker_first=True, num_casualties=0):
-        """Determines the probability of the attacking side winning the fight
+    def compute_victory_probabilities(self, attacking_units, defending_units, num_rounds, attacker_first, num_casualties):
+        """Performs the computation to determine the probability of the attacking side winning the fight
 
         """
-        # check for guaranteed attacker of defender wins
-        if num_rounds > 100:
+        # precision limit
+        if num_rounds > self.precision:
+            self.unresolved_battles += 1
+            self.battles_simulated += 1
             return 0.5
+        
+        # check for guaranteed attacker or defender wins
         orig_attacking_units, orig_defending_units = attacking_units[:], defending_units[:]
         if not(len(orig_attacking_units)):
             # defenders win all "draws"
+            self.battles_simulated += 1
             return 0
         elif not(len(orig_defending_units)):
+            self.battles_simulated += 1
             return 1
         
         # check if it is the attackers turn
@@ -160,13 +171,8 @@ class BattleSimulator(object):
             # determine the probability of each number of hits by the defenders
             hit_probabilities = self.compute_hit_probabilities(orig_defending_units, attacker_first)
             
-            defending_units = orig_defending_units[:]
-            if num_casualties:
-                # remove defender casualties
-                defending_units = self.remove_worst_units(orig_defending_units, num_casualties, side='defense')[:]
-            #else:
-                # otherwise, ensure there is at least one defender hit
-                #hit_probabilities.pop(0)
+            # remove defender casualties
+            defending_units = self.remove_worst_units(orig_defending_units, num_casualties, side='defense')[:]
             # take a sum of the win probabilities of each scenario resulting from the number of defender hits
             #print('def', len(orig_attacking_units), len(orig_defending_units), num_casualties, hit_probabilities)
             return sum(
@@ -175,10 +181,76 @@ class BattleSimulator(object):
                     attacker_first=(not attacker_first), num_casualties=0
                 ) for num_hits in hit_probabilities]
             )
+    
 
-            
+    def compute_victory_probabilities_2(self, attacking_units, defending_units):
+        num_rounds = 1
+        scenarios = [[attacking_units, defending_units]]
+        seen = {}
+        while num_rounds <= self.precision:
+            print(num_rounds, len(scenarios))
+            new_scenarios = []
+            for scen_attacking_units, scen_defending_units in scenarios:
+                # determine the probability of each number of hits by the attackers and defenders
+                att_hit_probabilities = self.compute_hit_probabilities(scen_attacking_units, is_attacker=True)
+                def_hit_probabilities = self.compute_hit_probabilities(scen_defending_units, is_attacker=False)
+
+                # determine all new scenarios that can result from the hit probabilities
+                for att_num_hits in att_hit_probabilities:
+                    for def_num_hits in def_hit_probabilities:
+                        scen_key = f"{len(scen_attacking_units)}_{len(scen_defending_units)}"
+                        if scen_key in seen:
+                            print(seen)
+                            new_attacking_units, new_defending_units = seen[scen_key]
+                        else:
+                            new_defending_units = self.remove_worst_units(scen_defending_units, att_num_hits, side='defense')[:]
+                            new_attacking_units = self.remove_worst_units(scen_attacking_units, def_num_hits, side='attack')[:]
+                            seen[scen_key] = [new_attacking_units, new_defending_units]
+                        if not len(new_attacking_units):
+                            # defenders win draws
+                            self.defender_wins += 1
+                            self.battles_simulated += 1
+                        elif not len(new_defending_units):
+                            self.attacker_wins += 1
+                            self.battles_simulated += 1
+                        else:
+                            new_scenarios.append([new_attacking_units, new_defending_units])
+                
+            # increment the number of rounds, and check for remaining scenarios
+            num_rounds += 1
+            if new_scenarios == []:
+                return
+            else:
+                scenarios = new_scenarios[:]
+
+    
+    def simulate_battle(self, num_rounds_precision=5):
+        """Wrapper for the computation of victory probabilities for a battle
+
+        """
+        # Update/reset attributes for new simulation
+        self.precision = num_rounds_precision
+        self.battles_simulated = 0
+        self.unresolved_battles = 0
+        self.defender_wins = 0
+        self.attacker_wins = 0
+
+        # simulate the battle
+        start_time = time.perf_counter()
+        self.compute_victory_probabilities_2(self.attacking_units, self.defending_units)
+        run_time = round(time.perf_counter()-start_time, 2)
+        print(f"Att wins {self.attacker_wins}, {round(self.attacker_wins/self.battles_simulated*100, 2)}%")
+        print(f"Def wins {self.defender_wins}, {round(self.defender_wins/self.battles_simulated*100, 2)}%")
+        print(f"Simulated {self.battles_simulated} battles in {run_time}s")
+
 
 if __name__ == "__main__":
-    sim = BattleSimulator(attacking_units={"Infantry": 3}, defending_units={"Infantry": 1})
-    res = sim.compute_victory_probabilities(sim.attacking_units, sim.defending_units, 1)
-    print(res)
+    #for num_units in range(1, 20):
+    attack = {
+        "Infantry": 3
+    }
+    defense = {
+        "Infantry": 1
+    }
+    sim = BattleSimulator(attacking_units=attack, defending_units=defense)
+    sim.simulate_battle(num_rounds_precision=5)
