@@ -49,7 +49,6 @@ def unit_gauntlet(ipc_value=20):
         avg_win_rates.append(round((att_win_rates[i]+def_win_rates[i])/2, 2))
     
     # display results
-    print()
     results = pd.DataFrame()
     results["Unit Name"] = [list(army)[0] for army in armies]
     results["# of Units"] = [army[list(army)[0]] for army in armies]
@@ -57,8 +56,8 @@ def unit_gauntlet(ipc_value=20):
     results["Defending Win Rate %"] = def_win_rates
     results["Combined Average Win Rate %"] = avg_win_rates
     results.sort_values(by="Combined Average Win Rate %", inplace=True, ascending=False)
-    print(results)
+    return results
 
 
 if __name__ == "__main__":
-    unit_gauntlet(ipc_value=40)
+    print(unit_gauntlet(ipc_value=20))
