@@ -1,4 +1,4 @@
-# AxisAndAlliesSandbox
+# Axis and Allies Sandbox
 As a huge fan of Axis and Allies, I have often thought about questions like:
 What is the win probability of this battle?
 Which unit is the most IPC efficient in combat?
