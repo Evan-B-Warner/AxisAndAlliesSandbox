@@ -1,6 +1,6 @@
+import itertools
 import json
 import time
-import itertools
 
 
 class Unit(object):
@@ -244,16 +244,3 @@ class BattleSimulator(object):
             print(f"Def wins {round(defending_win_rate*100, 2)}% of battles")
         
         return attacking_win_rate, defending_win_rate
-
-
-if __name__ == "__main__":
-    attack = {
-        "Infantry": 3,
-        "Artillery": 1
-    }
-    defense = {
-        "Infantry": 2,
-        "Artillery": 1
-    }
-    sim = BattleSimulator(attack, defense)
-    sim.simulate_battle(precision=10)
