@@ -19,7 +19,7 @@ also `best_army_by_ipc(ipc_value)`, which determines the best army in general wo
 
 ## Limitations
 The reason why I say this sandbox computes a "true" probability, is because the actual true probability of a battle is
-impossible to compute. This is because it is theoretially possible for the attacker and defender to perpetually achieve
+impossible to compute. This is because it is theoretically possible for the attacker and defender to perpetually achieve
 0 hits in each round of combat, meaning that a battle could last forever. As a result, the BattleSimulator has a modifiable
 `round precision` attribute. When simulating a battle, any scenario that takes more than `round precision` 
 rounds will be treated as half of a win for the attacker and defender. Naturally as you increase `round precision`, the probabilities
